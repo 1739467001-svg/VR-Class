@@ -154,7 +154,7 @@ const server = http.createServer(async (req, res) => {
       if (MOCK) {
         const s = loadSampleLesson();
         sse('meta', { topic, level: s.level, chapters: s.chapters.map(c => c.title), retrieval: false, mock: true });
-        for (let i = 0; i < s.chapters.length; i++) { await sleep(550); sse('chapter', { index: i, id: s.chapters[i].id, title: s.chapters[i].title, scenes: s.chapters[i].scenes }); }
+        for (let i = 0; i < s.chapters.length; i++) { sse('progress', { index: i, title: s.chapters[i].title }); await sleep(650); sse('chapter', { index: i, id: s.chapters[i].id, title: s.chapters[i].title, scenes: s.chapters[i].scenes }); }
         sse('done', {}); return res.end();
       }
       let outline = (j.outline && Array.isArray(j.outline.chapters) && j.outline.chapters.length) ? validateOutline(j.outline) : await generateOutline(topic, { level: j.level });
@@ -164,6 +164,7 @@ const server = http.createServer(async (req, res) => {
       sse('meta', { topic, level: outline.level || j.level || '', chapters: outline.chapters.map(c => c.title), retrieval: !!brief });
       if (brief) sse('brief', { brief });
       for (let i = 0; i < outline.chapters.length; i++) {
+        sse('progress', { index: i, title: outline.chapters[i].title });
         try { const scenes = await generateChapter(topic, outline, i, { level: outline.level || j.level, brief }); sse('chapter', { index: i, id: outline.chapters[i].id, title: outline.chapters[i].title, scenes }); }
         catch (e) { console.error(`[chapter ${i}]`, e.message); sse('chapter_error', { index: i, title: outline.chapters[i].title, message: e.message }); }
       }

@@ -718,6 +718,11 @@ function handleStreamEvent(ev){
     document.getElementById('topTitle').innerHTML=`正在上：<b>${esc(LESSON.title)}</b>${badge}`;
     if(d.retrieval) toast('🔎 时效性主题：已联网检索最新资料再讲（注意核对来源与时间）。');
   }
+  else if(ev.event==='progress'){
+    const label=`正在写第 ${(d.index||0)+1} 章「${d.title||''}」…`;
+    if(!PLAYBACK_STARTED){ const m=document.getElementById('loadingMain'); if(m) m.textContent=label; }
+    else if(WAITING_FOR_MORE){ document.getElementById('subtitle').textContent=label; document.getElementById('tutorBubble').textContent='马上好… ✍️'; }
+  }
   else if(ev.event==='brief'){ LESSON._brief=d.brief; }
   else if(ev.event==='chapter'){
     const ci=d.index; (d.scenes||[]).forEach(s=> LESSON.scenes.push({ch:ci, narration:s.narration, visual:s.visual, highlight:s.highlight||[]}));

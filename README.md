@@ -6,14 +6,44 @@
 
 ## 当前状态
 
-📄 **产品定义 + 设计原型阶段**。
+🚀 **可运行的端到端原型** — 点题 → AI 现场生成一堂课 → 虚拟教室里播放。
 
-- 📘 [产品需求文档（PRD）](docs/PRD.md) — 产品定义、功能需求、视觉呈现系统、内容生成管线、技术架构、MVP 范围与路线图。
-- 🎨 [交互 / 视觉设计稿](docs/UX-Design.md) — 虚拟教室布局、板书演示动效、老师立绘、配色字体规范（含截图）。
-- 🖥️ **[可交互原型 `prototype/classroom.html`](prototype/classroom.html)** — **双击用浏览器打开即可**，无需联网/安装。能点、能播、能提问，演示样例课《Transformer 注意力机制》。
-- 📜 [样例课脚本 `sample-lesson-attention.jsonc`](docs/sample-lesson-attention.jsonc) — 一堂课 = 一段可播放的结构化脚本，Lesson Script 数据契约的完整示例。
+### 快速开始
 
-> 想最快感受这个产品：直接用浏览器打开 `prototype/classroom.html`，用 `◀ ▶` 或空格键看老师"一笔一画"讲课。
+```bash
+# 1) 示例模式（无需 API Key，验证整条链路）
+npm run mock           # 等价 MOCK=1 node server/server.js
+
+# 2) 接真 AI（现场生成任意主题）
+ANTHROPIC_API_KEY=sk-ant-xxxx npm start
+```
+
+然后打开 **http://localhost:8000**，输入任意主题即可上课。详见 [运行指南](docs/RUNNING.md)。
+
+> 只想看界面：直接用浏览器双击打开 `prototype/classroom.html` 也行（不连后端时自动加载内置示例课）。
+
+### 架构一图
+
+```
+浏览器（通用"演示脚本播放器"）
+   │  POST /api/lesson { topic }
+   ▼
+后端 server/server.js + prompt.js ──► Claude（强制直出 JSON）
+   │  ◄── 校验 ── Lesson Script（chapters → scenes → visual）
+   ▼
+按 visual.type 渲染并逐场景播放：text / formula / diagram / code / heatmap / quiz …
+```
+
+**核心思想：课 = 一段可播放的结构化脚本。** 前端是通用播放器，喂不同脚本就上不同的课。
+
+### 文档与产物
+
+- 📘 [产品需求文档（PRD）](docs/PRD.md) — 产品定义、视觉呈现系统、内容生成管线、技术架构、MVP 与路线图。
+- 🎨 [交互 / 视觉设计稿](docs/UX-Design.md) — 虚拟教室布局、板书演示动效、老师立绘、配色字体（含截图）。
+- ▶️ [运行指南](docs/RUNNING.md) — 怎么跑、环境变量、接口、降级行为、下一步。
+- 🖥️ [可交互前端 `prototype/classroom.html`](prototype/classroom.html) — 通用演示脚本播放器（虚拟教室 UI）。
+- 🔌 [`server/`](server/) — 零依赖后端：`server.js`（HTTP + 编排）+ `prompt.js`（内容引擎提示）。
+- 📜 [样例课脚本 `sample-lesson-attention.jsonc`](docs/sample-lesson-attention.jsonc) — Lesson Script 数据契约的完整示例。
 
 ## 核心理念
 

@@ -1,0 +1,14 @@
+{
+  "name": "vr-class",
+  "version": "0.1.0",
+  "private": true,
+  "description": "沉浸式 AI 模拟课堂：学生点题 → AI 现场生成一堂可视化课 → 虚拟教室里播放",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "mock": "MOCK=1 node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

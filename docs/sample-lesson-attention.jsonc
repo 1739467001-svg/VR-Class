@@ -144,7 +144,7 @@
           "narration": "第一步：Q 和 K 做点积，得到每对词的相似度——也就是谁和谁相关。",
           "visual": {
             "type": "formula",
-            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{\\colorbox{amber}{$QK^{T}$}}{\\sqrt{d_k}}\\right)V"
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{\\textcolor{#f7b955}{QK^{T}}}{\\sqrt{d_k}}\\right)V"
           },
           "board_action": "highlight",
           "highlight": ["QK^T"],
@@ -154,7 +154,7 @@
           "narration": "第二步：除以根号 dₖ 做缩放。维度越高点积越大，会把 softmax 推向极端，缩放是为了让梯度稳定。",
           "visual": {
             "type": "formula",
-            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\colorbox{amber}{$\\sqrt{d_k}$}}\\right)V"
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\textcolor{#f7b955}{\\sqrt{d_k}}}\\right)V"
           },
           "board_action": "highlight",
           "highlight": ["\\sqrt{d_k}"],
@@ -165,7 +165,7 @@
           "narration": "第三步：softmax 把这些分数归一化成一组加起来等于 1 的权重。",
           "visual": {
             "type": "formula",
-            "latex": "\\text{Attention}(Q,K,V)=\\colorbox{amber}{$\\text{softmax}$}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)V"
+            "latex": "\\text{Attention}(Q,K,V)=\\textcolor{#f7b955}{\\text{softmax}}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)V"
           },
           "board_action": "highlight",
           "highlight": ["softmax"],
@@ -175,7 +175,7 @@
           "narration": "第四步：用这组权重去加权求和 V，得到融合了上下文的新表示。四步走完，就这么简单。",
           "visual": {
             "type": "formula",
-            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)\\colorbox{amber}{$V$}"
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)\\textcolor{#f7b955}{V}"
           },
           "board_action": "highlight",
           "highlight": ["V"],

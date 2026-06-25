@@ -124,6 +124,9 @@ VR-Class
 | **公式（formula）** | 怎么做 | [04](images/04-formula.png)：分式渲染 + **分步高亮**当前讲的项 |
 | **代码（code）** | 演示 | 语法高亮 + 行内注释，逐行出现 |
 | **注意力热力图（heatmap）** | 演示 | [05](images/05-heatmap.png)：权重矩阵，颜色深浅=关注多少 |
+| **随堂小测（quiz）** | 检验 | [07](images/07-quiz.png)：选项可点击，即时判分 + 错因解释 |
+
+> 接入真 AI 后，这些视觉全部由后端生成的 Lesson Script 数据驱动渲染（公式走 KaTeX、图示走 Mermaid）。怎么跑见 [运行指南](RUNNING.md)。
 
 ![为什么·对比图示](images/03-compare.png)
 

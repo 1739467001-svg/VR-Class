@@ -6,9 +6,14 @@
 
 ## 当前状态
 
-📄 **产品定义阶段** — 已完成产品需求文档初稿。
+📄 **产品定义 + 设计原型阶段**。
 
-- [产品需求文档（PRD）](docs/PRD.md) — 产品定义、功能需求、视觉呈现系统、内容生成管线、技术架构、MVP 范围与路线图。
+- 📘 [产品需求文档（PRD）](docs/PRD.md) — 产品定义、功能需求、视觉呈现系统、内容生成管线、技术架构、MVP 范围与路线图。
+- 🎨 [交互 / 视觉设计稿](docs/UX-Design.md) — 虚拟教室布局、板书演示动效、老师立绘、配色字体规范（含截图）。
+- 🖥️ **[可交互原型 `prototype/classroom.html`](prototype/classroom.html)** — **双击用浏览器打开即可**，无需联网/安装。能点、能播、能提问，演示样例课《Transformer 注意力机制》。
+- 📜 [样例课脚本 `sample-lesson-attention.jsonc`](docs/sample-lesson-attention.jsonc) — 一堂课 = 一段可播放的结构化脚本，Lesson Script 数据契约的完整示例。
+
+> 想最快感受这个产品：直接用浏览器打开 `prototype/classroom.html`，用 `◀ ▶` 或空格键看老师"一笔一画"讲课。
 
 ## 核心理念
 

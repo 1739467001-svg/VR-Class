@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VR-Class · 虚拟教室原型</title>
+<style>
+  :root{
+    --bg:#0b0e1a; --bg2:#11152a; --panel:#161b33; --panel2:#1c2340;
+    --board:#0a1622; --board-edge:#22304a;
+    --ink:#eaf0ff; --muted:#9aa6c4; --faint:#5c688a;
+    --teal:#36d6c3; --amber:#f7b955; --indigo:#8a9bff; --pink:#ff7ea8;
+    --hl:rgba(247,185,85,.22); --hl-line:#f7b955;
+    --radius:16px; --shadow:0 18px 50px rgba(0,0,0,.45);
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #1a2348 0%, transparent 60%),
+      radial-gradient(900px 600px at 90% 110%, #1a1230 0%, transparent 55%),
+      var(--bg);
+    overflow:hidden;
+  }
+  .app{height:100vh; display:flex; flex-direction:column; max-width:1240px; margin:0 auto; padding:0 16px}
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{display:flex; align-items:center; gap:14px; padding:14px 6px 10px}
+  .logo{display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.5px}
+  .logo .dot{width:26px;height:26px;border-radius:8px;
+    background:linear-gradient(135deg,var(--teal),var(--indigo)); box-shadow:0 0 18px rgba(54,214,195,.5)}
+  .logo small{font-weight:500; color:var(--muted); margin-left:2px}
+  .topbar .spacer{flex:1}
+  .lesson-title{font-size:14px; color:var(--muted)}
+  .lesson-title b{color:var(--ink)}
+  .top-btn{background:var(--panel); border:1px solid #2a335a; color:var(--muted); padding:7px 12px;
+    border-radius:10px; font-size:13px; cursor:pointer}
+  .top-btn:hover{color:var(--ink); border-color:#3a4684}
+
+  /* ============================================================= */
+  /*  入口 / 点题页                                                 */
+  /* ============================================================= */
+  #entry{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:8px}
+  #entry .kicker{color:var(--teal); font-weight:600; letter-spacing:3px; font-size:13px}
+  #entry h1{font-size:40px; margin:8px 0 4px; line-height:1.2}
+  #entry h1 .grad{background:linear-gradient(120deg,var(--teal),var(--indigo) 60%,var(--pink));
+    -webkit-background-clip:text; background-clip:text; color:transparent}
+  #entry p.sub{color:var(--muted); font-size:16px; margin:0 0 26px}
+  .ask{width:min(640px,92vw); background:var(--panel); border:1px solid #2c3768; border-radius:18px;
+    padding:10px 10px 10px 18px; display:flex; gap:10px; align-items:center; box-shadow:var(--shadow)}
+  .ask input{flex:1; background:transparent; border:0; outline:0; color:var(--ink); font-size:17px}
+  .ask input::placeholder{color:#6b769b}
+  .go{background:linear-gradient(135deg,var(--teal),var(--indigo)); color:#06121f; font-weight:700;
+    border:0; border-radius:12px; padding:12px 20px; font-size:15px; cursor:pointer; white-space:nowrap}
+  .go:hover{filter:brightness(1.07)}
+  .chips{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:18px; width:min(720px,92vw)}
+  .chip{background:var(--panel); border:1px solid #2a335a; color:var(--muted); padding:8px 14px;
+    border-radius:999px; font-size:13.5px; cursor:pointer; transition:.18s}
+  .chip:hover{color:var(--ink); border-color:var(--teal); transform:translateY(-1px)}
+  .chip .tag{color:var(--teal); font-size:11px; margin-right:6px}
+
+  /* ============================================================= */
+  /*  授课页                                                        */
+  /* ============================================================= */
+  #lesson{flex:1; display:none; grid-template-columns:210px 1fr; gap:16px; padding-bottom:14px; min-height:0}
+  #lesson.on{display:grid}
+
+  /* 章节导航 */
+  .rail{background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid #232a4d;
+    border-radius:var(--radius); padding:16px 14px; overflow:auto}
+  .rail h4{margin:2px 0 14px; font-size:12px; letter-spacing:2px; color:var(--muted); font-weight:600}
+  .step{display:flex; gap:10px; align-items:flex-start; padding:9px 8px; border-radius:10px; cursor:pointer;
+    color:var(--muted); font-size:13.5px; transition:.18s}
+  .step:hover{background:#1b2240}
+  .step .ix{width:22px;height:22px;border-radius:50%; border:1.5px solid #38426f; flex:none;
+    display:grid; place-items:center; font-size:11px; color:var(--muted)}
+  .step.done .ix{background:#243056; border-color:#3a4684; color:var(--teal)}
+  .step.active{background:linear-gradient(90deg,rgba(54,214,195,.14),transparent); color:var(--ink); font-weight:600}
+  .step.active .ix{border-color:var(--teal); color:#06121f; background:var(--teal); box-shadow:0 0 12px rgba(54,214,195,.6)}
+
+  /* 舞台 */
+  .stage{position:relative; display:flex; flex-direction:column; min-height:0}
+
+  /* 智能板书 */
+  .board-wrap{flex:1; position:relative; min-height:0}
+  .board{position:absolute; inset:0; background:
+      radial-gradient(120% 100% at 50% 0%, #102134 0%, var(--board) 55%, #070f18 100%);
+    border:1px solid var(--board-edge); border-radius:20px; box-shadow:var(--shadow), inset 0 0 60px rgba(0,0,0,.5);
+    overflow:hidden}
+  .board::before{content:""; position:absolute; inset:0; opacity:.5;
+    background-image:linear-gradient(#ffffff0a 1px,transparent 1px),linear-gradient(90deg,#ffffff0a 1px,transparent 1px);
+    background-size:34px 34px; mask:radial-gradient(120% 90% at 50% 40%,#000 55%,transparent 100%)}
+  .board-pad{position:absolute; inset:0; padding:34px 40px; display:flex; flex-direction:column; justify-content:center}
+  .chapter-tag{position:absolute; top:16px; left:22px; font-size:12px; letter-spacing:2px;
+    color:var(--teal); border:1px solid #1e6b62; background:rgba(54,214,195,.08); padding:4px 10px; border-radius:999px}
+  .scene-counter{position:absolute; top:16px; right:22px; font-size:12px; color:var(--faint)}
+
+  /* 板书内容通用：逐步呈现 */
+  .reveal{opacity:0; transform:translateY(14px); animation:reveal .5s var(--ease) forwards}
+  @keyframes reveal{to{opacity:1; transform:none}}
+
+  .b-title{font-size:30px; font-weight:750; margin:0 0 18px; line-height:1.25}
+  .b-title .u{background:linear-gradient(transparent 62%, var(--hl) 62%)}
+  .b-points{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px}
+  .b-points li{display:flex; gap:12px; font-size:19px; color:#dde6ff; align-items:flex-start}
+  .b-points li .bullet{color:var(--teal); font-size:20px; line-height:1.2}
+  .b-points li b{color:var(--amber)}
+
+  .hook-q{font-size:26px; line-height:1.6; color:#eaf0ff; max-width:760px}
+  .hook-q .pill{background:#172742; border:1px solid #2a4570; padding:2px 10px; border-radius:8px}
+  .hook-q .word2{color:var(--teal); font-weight:700}
+  .hook-q .word{position:relative; color:var(--amber); font-weight:700; padding:0 3px}
+  .hook-q .arrow{color:var(--teal); font-size:14px}
+  .hook-note{margin-top:22px; color:var(--muted); font-size:15px}
+
+  /* 公式 */
+  .formula{font-size:30px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; line-height:1.4;
+    font-family:"Cambria Math","Times New Roman",Georgia,serif}
+  .formula .part{padding:2px 6px; border-radius:8px; transition:.35s}
+  .formula .part.hl{background:var(--hl); box-shadow:inset 0 -2px 0 var(--hl-line)}
+  .frac{display:inline-flex; flex-direction:column; text-align:center; vertical-align:middle; margin:0 4px}
+  .frac .num{padding:0 8px 3px; border-bottom:2px solid #cdd7f5}
+  .frac .den{padding:3px 8px 0}
+  .sub{font-size:.62em; vertical-align:sub}
+  .sup{font-size:.62em; vertical-align:super}
+  .formula-cap{margin-top:26px; font-size:17px; color:var(--muted); min-height:24px}
+  .formula-cap b{color:var(--amber)}
+
+  /* 图示：RNN vs 注意力 */
+  .compare{display:flex; gap:34px; flex-wrap:wrap}
+  .cmp{flex:1; min-width:240px; background:#0d1a2b; border:1px solid #1f3350;
+    border-radius:14px; padding:18px}
+  .cmp h5{margin:0 0 14px; font-size:14px; color:var(--muted); letter-spacing:1px}
+  .nodes{display:flex; gap:12px; align-items:center; justify-content:center; height:90px}
+  .node{width:42px;height:42px;border-radius:10px; display:grid; place-items:center; font-size:13px; font-weight:600;
+    background:#16263d; border:1px solid #2c456a; color:#cfe}
+  .seq-arrow{color:var(--faint)}
+  .cmp.bad{border-color:#5a2c3a}
+  .cmp.good{border-color:#1e6b62}
+  .cmp .verdict{margin-top:12px; font-size:13.5px}
+  .cmp.bad .verdict{color:var(--pink)}
+  .cmp.good .verdict{color:var(--teal)}
+  .fan{position:relative; height:90px}
+  .fan svg{position:absolute; inset:0; width:100%; height:100%}
+
+  /* 代码 */
+  .code{background:#070d16; border:1px solid #1d2a44; border-radius:12px; padding:18px 20px; font-size:15px;
+    font-family:"JetBrains Mono",Consolas,Menlo,monospace; line-height:1.7; color:#cdd6f4; overflow:auto}
+  .code .ln{display:block; white-space:pre}
+  .code .c{color:#6b7a99} .code .k{color:#c792ea} .code .f{color:#82aaff}
+  .code .n{color:#f7b955} .code .s{color:#c3e88d}
+
+  /* 注意力热力图 */
+  .heat-wrap{display:flex; gap:30px; align-items:center; flex-wrap:wrap}
+  .heat{display:inline-grid; grid-template-columns:auto repeat(3,46px); gap:6px; align-items:center}
+  .heat .h-lbl{font-size:14px; color:var(--muted); text-align:right; padding-right:6px}
+  .heat .h-col{font-size:13px; color:var(--muted); text-align:center}
+  .cell{height:46px; border-radius:8px; display:grid; place-items:center; font-size:12px; color:#04121b; font-weight:700;
+    background:var(--teal)}
+  .heat-note{max-width:300px; color:var(--muted); font-size:15px; line-height:1.7}
+  .heat-note b{color:var(--amber)}
+
+  /* 小结 */
+  .summary-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .sum-card{background:#0d1a2b; border:1px solid #1f3350; border-radius:12px; padding:14px 16px}
+  .sum-card .k{color:var(--teal); font-size:13px; font-weight:600; margin-bottom:6px}
+  .sum-card .v{font-size:15px; color:#dde6ff}
+
+  /* ---------- 老师立绘 ---------- */
+  .tutor{position:absolute; left:10px; bottom:10px; display:flex; align-items:flex-end; gap:12px; z-index:5}
+  .avatar{position:relative; width:96px; height:96px; flex:none}
+  .avatar svg{width:100%; height:100%; filter:drop-shadow(0 10px 20px rgba(0,0,0,.5))}
+  .avatar .ring{position:absolute; inset:-6px; border-radius:50%; border:2px solid var(--teal); opacity:0}
+  .tutor.speaking .avatar .ring{animation:ping 1.6s var(--ease) infinite}
+  @keyframes ping{0%{opacity:.7; transform:scale(.92)}70%{opacity:0; transform:scale(1.18)}100%{opacity:0}}
+  .bubble{background:var(--panel2); border:1px solid #2c3768; border-radius:14px 14px 14px 4px; padding:9px 14px;
+    max-width:230px; font-size:13px; color:var(--muted); margin-bottom:14px; opacity:0; transition:.3s}
+  .tutor.speaking .bubble{opacity:1}
+  .tutor .name{position:absolute; left:0; bottom:-2px; font-size:11px; color:var(--faint); width:96px; text-align:center}
+
+  /* ---------- 字幕条 ---------- */
+  .subtitle{margin-top:14px; background:linear-gradient(90deg,rgba(20,26,52,.9),rgba(16,20,40,.65));
+    border:1px solid #232a4d; border-radius:14px; padding:14px 18px; min-height:58px; display:flex; align-items:center; gap:12px}
+  .subtitle .mic{color:var(--teal); font-size:18px; flex:none}
+  .subtitle p{margin:0; font-size:16.5px; line-height:1.55; color:#e8eeff}
+
+  /* ---------- 控制条 ---------- */
+  .controls{margin-top:12px; display:flex; align-items:center; gap:10px}
+  .ctrl{background:var(--panel); border:1px solid #2a335a; color:var(--ink); width:42px; height:42px; border-radius:12px;
+    display:grid; place-items:center; cursor:pointer; font-size:16px; transition:.15s}
+  .ctrl:hover{border-color:var(--teal); color:var(--teal)}
+  .ctrl.primary{background:linear-gradient(135deg,var(--teal),var(--indigo)); color:#06121f; border:0; width:46px;height:46px; font-size:18px}
+  .progress{flex:1; height:8px; background:#1a2140; border-radius:999px; overflow:hidden; margin:0 8px}
+  .progress .bar{height:100%; width:0; background:linear-gradient(90deg,var(--teal),var(--indigo)); transition:width .4s var(--ease)}
+  .ask-btn{background:#172742; border:1px solid #2a4570; color:var(--teal); padding:0 16px; height:42px;
+    border-radius:12px; cursor:pointer; font-size:14px; font-weight:600; display:flex; align-items:center; gap:7px}
+  .ask-btn:hover{background:#1d3253}
+
+  /* ---------- 提问浮层 ---------- */
+  .modal-bg{position:fixed; inset:0; background:rgba(5,8,18,.66); backdrop-filter:blur(4px); display:none;
+    align-items:center; justify-content:center; z-index:50}
+  .modal-bg.on{display:flex}
+  .modal{width:min(560px,92vw); background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid #2c3768;
+    border-radius:18px; padding:22px; box-shadow:var(--shadow)}
+  .modal h3{margin:0 0 4px; font-size:18px}
+  .modal .qline{display:flex; gap:8px; margin:16px 0}
+  .modal .qline input{flex:1; background:#0d1226; border:1px solid #2a335a; border-radius:10px; color:var(--ink);
+    padding:11px 14px; outline:0; font-size:15px}
+  .ans{background:#0d1a2b; border:1px solid #1f3350; border-radius:12px; padding:14px 16px; margin-top:6px;
+    font-size:15px; line-height:1.7; color:#dde6ff}
+  .ans .who{color:var(--teal); font-weight:600; font-size:13px; margin-bottom:6px; display:flex; gap:7px; align-items:center}
+  .modal .foot{display:flex; justify-content:flex-end; gap:10px; margin-top:18px}
+  .ghost{background:transparent; border:1px solid #2a335a; color:var(--muted); padding:9px 16px; border-radius:10px; cursor:pointer}
+  .ghost:hover{color:var(--ink)}
+
+  .hint{position:fixed; bottom:14px; left:50%; transform:translateX(-50%); font-size:12px; color:var(--faint);
+    background:#0d1226; border:1px solid #232a4d; padding:6px 14px; border-radius:999px; z-index:40}
+  @media(max-width:780px){
+    #lesson{grid-template-columns:1fr} .rail{display:none}
+    #entry h1{font-size:30px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div class="logo"><span class="dot"></span>VR-Class <small>沉浸式 AI 模拟课堂 · 原型</small></div>
+    <div class="spacer"></div>
+    <div class="lesson-title" id="topTitle"></div>
+    <button class="top-btn" onclick="resetApp()">↻ 重新点题</button>
+  </div>
+
+  <!-- ====== 入口 / 点题 ====== -->
+  <section id="entry">
+    <div class="kicker">VIRTUAL CLASSROOM</div>
+    <h1>今天想学点 <span class="grad">什么</span>？</h1>
+    <p class="sub">说出一个主题，老师就在虚拟教室里，一笔一画讲给你看。</p>
+    <div class="ask">
+      <input id="topicInput" placeholder="例如：Transformer 的注意力机制是怎么算的？" />
+      <button class="go" onclick="startLesson()">开始上课 ▶</button>
+    </div>
+    <div class="chips">
+      <div class="chip" onclick="fillTopic('Transformer 的注意力机制')"><span class="tag">AI前沿</span>注意力机制怎么算</div>
+      <div class="chip" onclick="fillTopic('微积分里的极限')"><span class="tag">数理</span>微积分的极限到底在说什么</div>
+      <div class="chip" onclick="fillTopic('什么是区块链')"><span class="tag">概念</span>用大白话讲清楚区块链</div>
+      <div class="chip" onclick="fillTopic('光合作用')"><span class="tag">理科</span>光合作用</div>
+    </div>
+  </section>
+
+  <!-- ====== 授课页 ====== -->
+  <section id="lesson">
+    <!-- 章节导航 -->
+    <aside class="rail">
+      <h4>今天的课</h4>
+      <div id="railList"></div>
+    </aside>
+
+    <!-- 舞台 -->
+    <div class="stage">
+      <div class="board-wrap">
+        <div class="board">
+          <div class="chapter-tag" id="chapterTag">导入</div>
+          <div class="scene-counter" id="sceneCounter"></div>
+          <div class="board-pad" id="boardPad"></div>
+
+          <!-- 老师立绘 -->
+          <div class="tutor speaking" id="tutor">
+            <div class="avatar">
+              <div class="ring"></div>
+              <svg viewBox="0 0 120 120">
+                <defs>
+                  <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#8a9bff"/><stop offset="1" stop-color="#36d6c3"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="60" cy="60" r="58" fill="#141a33"/>
+                <path d="M18 108 Q60 74 102 108 Z" fill="url(#g1)"/>
+                <path d="M30 104 Q60 84 90 104 L86 116 L34 116 Z" fill="#26305a"/>
+                <circle cx="60" cy="50" r="24" fill="#f3c9a4"/>
+                <path d="M36 46 Q40 24 60 24 Q80 24 84 46 Q80 36 60 36 Q40 36 36 46Z" fill="#3a2f4d"/>
+                <rect x="44" y="47" width="13" height="10" rx="3" fill="none" stroke="#1c2440" stroke-width="2"/>
+                <rect x="63" y="47" width="13" height="10" rx="3" fill="none" stroke="#1c2440" stroke-width="2"/>
+                <line x1="57" y1="51" x2="63" y2="51" stroke="#1c2440" stroke-width="2"/>
+                <circle cx="50.5" cy="52" r="1.8" fill="#1c2440"/><circle cx="69.5" cy="52" r="1.8" fill="#1c2440"/>
+                <path d="M54 62 Q60 66 66 62" fill="none" stroke="#b56a4d" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="name">林老师</div>
+            <div class="bubble" id="tutorBubble">在听，随时可以打断我提问 🙋</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 字幕 -->
+      <div class="subtitle"><span class="mic">🔊</span><p id="subtitle">…</p></div>
+
+      <!-- 控制 -->
+      <div class="controls">
+        <div class="ctrl" title="上一步" onclick="prevScene()">◀</div>
+        <div class="ctrl primary" id="playBtn" title="自动播放/暂停" onclick="togglePlay()">⏸</div>
+        <div class="ctrl" title="下一步" onclick="nextScene()">▶</div>
+        <div class="progress"><div class="bar" id="progressBar"></div></div>
+        <button class="ask-btn" onclick="openAsk()">💬 提问</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 提问浮层 -->
+<div class="modal-bg" id="askModal">
+  <div class="modal">
+    <h3>举手提问</h3>
+    <div style="color:var(--muted);font-size:13px">老师会在当前进度的上下文里回答，答完自动回到课堂。</div>
+    <div class="qline">
+      <input id="askInput" placeholder="例如：为什么要除以 √dₖ ？" />
+      <button class="go" style="padding:11px 16px" onclick="answerAsk()">问</button>
+    </div>
+    <div class="ans">
+      <div class="who">🎓 林老师</div>
+      <div id="askAnswer">点上面那道示例问题问问看，或自己输入一个问题。</div>
+    </div>
+    <div class="foot"><button class="ghost" onclick="closeAsk()">回到课堂 ▶</button></div>
+  </div>
+</div>
+
+<div class="hint">这是<b style="color:var(--teal)">交互原型</b> · 用 ◀ ▶ 或自动播放看板书逐步演示，点「提问」体验追问</div>
+
+<script>
+/* =========================================================================
+   演示用的"课程脚本"（Lesson Script 的简化子集，完整版见 docs/sample-lesson-attention.jsonc）
+   每个 scene = 讲解词(narration) + 一块板书视觉(render)
+   ========================================================================= */
+const LESSON = {
+  title:"Transformer 的注意力机制",
+  chapters:["导入","是什么","为什么","怎么做","演示","小结"],
+  scenes:[
+    /* —— 导入 —— */
+    {ch:0, narration:"先看这句话——读到「它」的时候，你怎么知道指的是猫，而不是垫子？",
+      render:()=>hook(`小猫跳上垫子，因为 <span class="word">它</span> 很软。`,
+        `你瞬间就联系到了上下文里的相关词。<b style="color:var(--amber)">注意力机制，做的就是这件事</b>：让模型为每个词，找到该「关注」哪些词。`)},
+    {ch:0, narration:"机器没有直觉。它需要一套数学办法，来决定「每个词该看其他哪些词、看多重」。这套办法，就是今天的主角。",
+      render:()=>hook(`小猫跳上 <span class="word2">垫子</span>，因为 <span class="word">它</span> 很 <span class="word2">软</span>。`,
+        `「它」↔「猫/垫子」该连多紧？「软」在描述谁？——<b style="color:var(--amber)">这些关联强度，正是注意力要算出来的。</b>`)},
+
+    /* —— 是什么 —— */
+    {ch:1, narration:"一句话定义：注意力，就是为每个词，按「相关度」对其他词的信息做一次加权汇总。",
+      render:()=>points("注意力机制是什么",[
+        `为<b>每个词</b>，计算它与其他词的<b>相关度</b>`,
+        `按相关度当<b>权重</b>，把其他词的信息<b>加权汇总</b>`,
+        `于是每个词都带上了<b>该有的上下文</b>`])},
+    {ch:1, narration:"实现上靠三个角色：Query 查询、Key 钥匙、Value 内容。打个比方——",
+      render:()=>points("三个角色：Q / K / V",[
+        `<b>Query（查询）</b>：我想找什么？—— 当前这个词发出的"问题"`,
+        `<b>Key（钥匙）</b>：我是谁、能匹配什么 —— 每个词的"标签"`,
+        `<b>Value（内容）</b>：我能提供什么信息 —— 每个词的"内容"`])},
+    {ch:1, narration:"像在图书馆查资料：你的问题是 Query，书脊标签是 Key，匹配上了，就去取书里的内容 Value。",
+      render:()=>hook(`图书馆类比：<span class="pill">问题=Q</span> 去比对 <span class="pill">书签=K</span>，越匹配，就越多地取走 <span class="pill">书的内容=V</span>。`,
+        `匹配度高 → 权重大 → 这本"书"的内容贡献多。注意力就是这么个加权取信息的过程。`)},
+
+    /* —— 为什么 —— */
+    {ch:2, narration:"为什么需要它？看看它取代的老办法 RNN 有什么毛病。",
+      render:()=>compare()},
+    {ch:2, narration:"RNN 一个词一个词顺着读，离得远的词信息会衰减，而且没法并行；注意力一步就让任意两个词直接相连，还能整句并行计算。这就是它的威力。",
+      render:()=>points("注意力赢在哪",[
+        `<b>长距离直达</b>：任意两词一步相连，不怕隔得远`,
+        `<b>可并行</b>：整句一起算，训练快得多`,
+        `<b>全局视野</b>：每个词都能看到全句再决定关注谁`])},
+
+    /* —— 怎么做 —— */
+    {ch:3, narration:"上公式。别怕，我们一项一项拆。这就是大名鼎鼎的「缩放点积注意力」。",
+      render:()=>formula(null,"这一个式子，拆成四步就懂了。")},
+    {ch:3, narration:"第一步：Q 和 K 做点积，得到每对词的相似度——也就是「谁和谁相关」。",
+      render:()=>formula("qk",`<b>① Q·Kᵀ</b>：算相似度，谁和谁相关`)},
+    {ch:3, narration:"第二步：除以根号 dₖ 做缩放。维度越高点积越大，会把 softmax 推向极端，缩放是为了让梯度稳定。",
+      render:()=>formula("scale",`<b>② ÷√dₖ</b>：缩放，防止数值过大、梯度不稳`)},
+    {ch:3, narration:"第三步：softmax 把这些分数归一化成一组加起来等于 1 的权重。",
+      render:()=>formula("soft",`<b>③ softmax</b>：把分数变成和为 1 的权重`)},
+    {ch:3, narration:"第四步：用这组权重去加权求和 V，得到融合了上下文的新表示。四步走完，就这么简单。",
+      render:()=>formula("v",`<b>④ ×V</b>：按权重加权求和，得到带上下文的新表示`)},
+
+    /* —— 演示 —— */
+    {ch:4, narration:"看段伪代码走一遍，其实就四行核心。",
+      render:()=>code()},
+    {ch:4, narration:"再看一眼算出来的权重长什么样：每一行是一个词的注意力分布，颜色越深、关注越多。看「它」那一行——它把注意力大量分给了「猫」。",
+      render:()=>heat()},
+
+    /* —— 小结 —— */
+    {ch:5, narration:"收一下。注意力就一句话：为每个词，按相关度加权汇总上下文。记住 Q/K/V 和这四步，你就抓住了 Transformer 的心脏。",
+      render:()=>summary()},
+  ]
+};
+
+/* ---------- 各类板书渲染器 ---------- */
+function el(html){const d=document.createElement("div"); d.className="reveal"; d.innerHTML=html; return d;}
+function setBoard(node){const pad=document.getElementById("boardPad"); pad.innerHTML=""; pad.appendChild(node);}
+
+function hook(q,note){return el(`<div class="hook-q">${q}</div><div class="hook-note">${note}</div>`);}
+function points(title,items){
+  return el(`<h2 class="b-title"><span class="u">${title}</span></h2>
+    <ul class="b-points">${items.map((t,i)=>`<li style="animation-delay:${.15+i*.18}s" class="reveal"><span class="bullet">▸</span><span>${t}</span></li>`).join("")}</ul>`);
+}
+const FORMULA_HTML = `
+  <div class="formula">
+    <span>Attention(Q, K, V) =</span>
+    <span class="part" data-p="soft">softmax<span style="font-size:.7em">(</span></span>
+    <span class="frac">
+      <span class="num"><span class="part" data-p="qk">Q&nbsp;K<span class="sup">T</span></span></span>
+      <span class="den"><span class="part" data-p="scale">&radic;d<span class="sub">k</span></span></span>
+    </span>
+    <span class="part" data-p="soft" style="font-size:.7em">)</span>
+    <span class="part" data-p="v">V</span>
+  </div>`;
+function formula(hl,cap){
+  const node = el(FORMULA_HTML + `<div class="formula-cap">${cap||""}</div>`);
+  if(hl) node.querySelectorAll(`.part[data-p="${hl}"]`).forEach(p=>p.classList.add("hl"));
+  return node;
+}
+function compare(){
+  return el(`<h2 class="b-title" style="font-size:22px">为什么不用老办法 RNN？</h2>
+  <div class="compare">
+    <div class="cmp bad">
+      <h5>RNN：顺序处理</h5>
+      <div class="nodes">
+        <div class="node">w₁</div><span class="seq-arrow">→</span>
+        <div class="node">w₂</div><span class="seq-arrow">→</span>
+        <div class="node">w₃</div><span class="seq-arrow">→</span>
+        <div class="node">w₄</div>
+      </div>
+      <div class="verdict">✗ 远距离信息衰减　✗ 无法并行</div>
+    </div>
+    <div class="cmp good">
+      <h5>注意力：两两直连</h5>
+      <div class="fan"><svg viewBox="0 0 220 90" preserveAspectRatio="none">
+        <g stroke="#36d6c3" stroke-width="1.4" opacity=".55" fill="none">
+          <path d="M30 70 C 80 10, 140 10, 190 70"/><path d="M30 70 L 110 18"/>
+          <path d="M110 18 L 190 70"/><path d="M30 70 L 190 70"/></g>
+        <g fill="#16263d" stroke="#36d6c3"><circle cx="30" cy="70" r="13"/><circle cx="110" cy="18" r="13"/><circle cx="190" cy="70" r="13"/></g>
+        <g fill="#cfe" font-size="11" text-anchor="middle" font-family="sans-serif"><text x="30" y="74">w₁</text><text x="110" y="22">w₂</text><text x="190" y="74">w₃</text></g>
+      </svg></div>
+      <div class="verdict">✓ 任意两词一步直达　✓ 整句并行</div>
+    </div>
+  </div>`);
+}
+function code(){
+  return el(`<h2 class="b-title" style="font-size:22px">核心其实就四行</h2>
+  <div class="code">
+<span class="ln"><span class="c"># Q,K,V: 形状 [序列长度, d_k]</span></span>
+<span class="ln"><span class="n">scores</span> = Q @ K.<span class="f">T</span>                <span class="c"># ① 点积算相似度</span></span>
+<span class="ln"><span class="n">scores</span> = scores / np.<span class="f">sqrt</span>(d_k)   <span class="c"># ② 缩放</span></span>
+<span class="ln"><span class="n">weights</span> = <span class="f">softmax</span>(scores, axis=-1) <span class="c"># ③ 归一化成权重</span></span>
+<span class="ln"><span class="n">output</span>  = weights @ V            <span class="c"># ④ 加权求和 V</span></span>
+  </div>`);
+}
+function heat(){
+  const rows=["小猫","垫子","它"], cols=["小猫","垫子","它"];
+  const W=[[.7,.2,.1],[.2,.7,.1],[.62,.18,.20]];
+  let cells=`<div class="h-lbl"></div>`+cols.map(c=>`<div class="h-col">${c}</div>`).join("");
+  rows.forEach((r,i)=>{cells+=`<div class="h-lbl">${r}</div>`+W[i].map(v=>`<div class="cell" style="background:rgba(54,214,195,${.12+v});">${v.toFixed(2)}</div>`).join("");});
+  return el(`<h2 class="b-title" style="font-size:22px">注意力权重热力图</h2>
+   <div class="heat-wrap"><div class="heat">${cells}</div>
+   <div class="heat-note">看最后一行 <b>「它」</b>：它把 <b>0.62</b> 的注意力给了「小猫」，模型据此判断「它」≈「猫」。<br><br>颜色越深 = 关注越多。</div></div>`);
+}
+function summary(){
+  return el(`<h2 class="b-title"><span class="u">一页记住注意力</span></h2>
+  <div class="summary-grid">
+    <div class="sum-card"><div class="k">一句话</div><div class="v">为每个词，按相关度加权汇总上下文。</div></div>
+    <div class="sum-card"><div class="k">三角色</div><div class="v">Q 查询 · K 钥匙 · V 内容</div></div>
+    <div class="sum-card"><div class="k">四步</div><div class="v">点积 → 缩放 → softmax → 加权求和</div></div>
+    <div class="sum-card"><div class="k">再往下</div><div class="v">多头注意力 → 拼成 Transformer →
+      ChatGPT 的地基。</div></div>
+  </div>`);
+}
+
+/* ---------- 播放器 ---------- */
+let cur=0, playing=true, timer=null;
+const PLAY_MS=4200;
+
+function renderRail(){
+  const list=document.getElementById("railList"); list.innerHTML="";
+  LESSON.chapters.forEach((c,i)=>{
+    const d=document.createElement("div"); d.className="step"; d.dataset.ch=i;
+    d.innerHTML=`<span class="ix">${i+1}</span><span>${c}</span>`;
+    d.onclick=()=>jumpToChapter(i);
+    list.appendChild(d);
+  });
+}
+function renderScene(i){
+  cur=Math.max(0,Math.min(i,LESSON.scenes.length-1));
+  const s=LESSON.scenes[cur];
+  setBoard(s.render());
+  document.getElementById("subtitle").textContent=s.narration;
+  document.getElementById("chapterTag").textContent=LESSON.chapters[s.ch];
+  document.getElementById("sceneCounter").textContent=`${cur+1} / ${LESSON.scenes.length}`;
+  document.getElementById("progressBar").style.width=((cur+1)/LESSON.scenes.length*100)+"%";
+  // 章节高亮
+  document.querySelectorAll(".step").forEach(st=>{
+    const ch=+st.dataset.ch; st.classList.toggle("active",ch===s.ch); st.classList.toggle("done",ch<s.ch);
+  });
+  // 老师"说话"
+  const t=document.getElementById("tutor"); t.classList.add("speaking");
+  document.getElementById("tutorBubble").textContent = pick(s.ch);
+}
+function pick(ch){return ["我们从一个直觉开始 👀","跟着我，一步步来 ✍️","这里是重点，记一下 ⭐","看演示，会更清楚 🔍","收个尾，记住核心 ✅"][ch]||"在听 🙋";}
+
+function nextScene(){ if(cur<LESSON.scenes.length-1){renderScene(cur+1);} else {pausePlay();} resetTimer(); }
+function prevScene(){ renderScene(cur-1); resetTimer(); }
+function jumpToChapter(ch){ const idx=LESSON.scenes.findIndex(s=>s.ch===ch); if(idx>=0){renderScene(idx); resetTimer();} }
+
+function togglePlay(){ playing?pausePlay():startPlay(); }
+function startPlay(){ playing=true; document.getElementById("playBtn").textContent="⏸"; resetTimer(); }
+function pausePlay(){ playing=false; document.getElementById("playBtn").textContent="▶"; clearTimeout(timer); }
+function resetTimer(){ clearTimeout(timer); if(playing){ timer=setTimeout(()=>{ if(cur<LESSON.scenes.length-1){nextScene();} else {pausePlay();} }, PLAY_MS); } }
+
+/* ---------- 入口 / 导航 ---------- */
+function fillTopic(t){ document.getElementById("topicInput").value=t; }
+function startLesson(){
+  document.getElementById("entry").style.display="none";
+  document.getElementById("lesson").classList.add("on");
+  document.getElementById("topTitle").innerHTML=`正在上：<b>${LESSON.title}</b>`;
+  renderRail(); renderScene(0); startPlay();
+}
+function resetApp(){
+  pausePlay();
+  document.getElementById("lesson").classList.remove("on");
+  document.getElementById("entry").style.display="flex";
+  document.getElementById("topTitle").textContent="";
+}
+
+/* ---------- 提问浮层 ---------- */
+const QA={
+  "为什么要除以":"因为 Q·K 的点积会随维度 dₖ 变大，数值一大，softmax 就会变得非常「尖」（接近 0/1），梯度趋近于 0、训练不稳。除以 √dₖ 把方差拉回到 1 附近，让分布平滑、梯度健康。",
+  "softmax":"softmax 把一组任意大小的分数，变成一组都为正、且加起来等于 1 的权重——这样它们才能当「占比」去加权求和 V。分数高的词，权重就大。",
+  "default":"好问题！在真实产品里，我会结合你当前学到的这一步，临时在板书上补一段演示再讲给你听，然后回到原进度继续。"
+};
+function openAsk(){ pausePlay(); document.getElementById("askModal").classList.add("on"); }
+function closeAsk(){ document.getElementById("askModal").classList.remove("on"); startPlay(); }
+function answerAsk(){
+  const q=document.getElementById("askInput").value||"为什么要除以 √dₖ";
+  let a=QA.default;
+  for(const k in QA){ if(k!=="default" && q.includes(k)){ a=QA[k]; break; } }
+  document.getElementById("askAnswer").textContent=a;
+}
+document.getElementById("askInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")answerAsk();});
+
+/* 键盘：← → 控制 */
+window.addEventListener("keydown",e=>{
+  if(document.getElementById("lesson").classList.contains("on")){
+    if(e.key==="ArrowRight")nextScene();
+    if(e.key==="ArrowLeft")prevScene();
+    if(e.key===" "){e.preventDefault();togglePlay();}
+  }
+});
+</script>
+</body>
+</html>

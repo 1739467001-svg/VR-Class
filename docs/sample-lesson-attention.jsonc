@@ -1,0 +1,296 @@
+// =============================================================================
+//  样例课脚本 · 《Transformer 的注意力机制》
+//  —— 演示 Lesson Script 数据契约（PRD §5.3）的一份完整、真实示例。
+//
+//  这就是"视觉化授课"的技术本质：一堂课 = 一段可被前端「播放」的结构化脚本。
+//  前端是通用播放器，喂不同的脚本就上不同的课。
+//  prototype/classroom.html 播放的是本脚本的简化子集；这里是完整版。
+//
+//  契约速览：
+//    Lesson  { topic, level, language, tutor_persona, meta, chapters[] }
+//    Chapter { id, title, scenes[] }
+//    Scene   { narration, visual, board_action, highlight?, pause_for_question?, est_duration_ms? }
+//    Visual  = text | formula | diagram | code | image | chart | animation
+//              | heatmap | quiz        // ← 后两者为按需扩展（新增视觉 = 扩展联合类型 + 前端加渲染器）
+//    board_action ∈ fade_in | reveal_list | draw_step_by_step | write_formula
+//                   | type_code | highlight | clear
+// =============================================================================
+{
+  "topic": "Transformer 的注意力机制",
+  "level": "入门到进阶（假设懂一点向量/矩阵）",
+  "language": "zh-CN",
+  "tutor_persona": "lin_laoshi",          // 林老师：亲切、有耐心、爱用类比
+
+  // —— 时效性元数据（PRD 锁定 D3：AI 前沿主题须联网保时效）——
+  // 本主题是"基础概念"，不依赖最新资料，故 requires_retrieval=false。
+  // 若主题是"最近发布的某模型/某技术"，则置 true，并由检索层回填 sources，
+  // 在板书角标标注信息时间与出处，避免用模型记忆讲"最新"。
+  "meta": {
+    "requires_retrieval": false,
+    "knowledge_freshness": "evergreen",
+    "sources": []
+  },
+
+  "chapters": [
+    // ========================================================================
+    {
+      "id": "hook",
+      "title": "导入",
+      "scenes": [
+        {
+          "narration": "先看这句话——读到「它」的时候，你怎么知道指的是猫，而不是垫子？",
+          "visual": {
+            "type": "text",
+            "content": "小猫跳上垫子，因为 **它** 很软。"
+          },
+          "board_action": "fade_in",
+          "highlight": ["它"],
+          "est_duration_ms": 4200
+        },
+        {
+          "narration": "你瞬间就联系到了上下文里的相关词。注意力机制做的就是这件事：让模型为每个词，找到该「关注」哪些词。机器没有直觉，它需要一套数学办法来决定——每个词该看其他哪些词、看多重。",
+          "visual": {
+            "type": "text",
+            "content": "小猫跳上 **垫子**，因为 **它** 很 **软**。\n\n这些词之间该连多紧？——正是注意力要算出来的。"
+          },
+          "board_action": "highlight",
+          "highlight": ["它", "垫子", "软"],
+          "pause_for_question": true,
+          "est_duration_ms": 7000
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "what",
+      "title": "是什么",
+      "scenes": [
+        {
+          "narration": "一句话定义：注意力，就是为每个词，按「相关度」对其他词的信息做一次加权汇总。",
+          "visual": {
+            "type": "text",
+            "content": "## 注意力机制是什么\n- 为**每个词**，计算它与其他词的**相关度**\n- 按相关度当**权重**，把其他词的信息**加权汇总**\n- 于是每个词都带上了**该有的上下文**"
+          },
+          "board_action": "reveal_list",
+          "est_duration_ms": 5500
+        },
+        {
+          "narration": "实现上靠三个角色：Query 查询、Key 钥匙、Value 内容。Query 是当前词发出的「问题」，Key 是每个词的「标签」，Value 是每个词的「内容」。",
+          "visual": {
+            "type": "text",
+            "content": "## 三个角色：Q / K / V\n- **Query（查询）**：我想找什么？\n- **Key（钥匙）**：我是谁、能匹配什么\n- **Value（内容）**：我能提供什么信息"
+          },
+          "board_action": "reveal_list",
+          "est_duration_ms": 6000
+        },
+        {
+          "narration": "像在图书馆查资料：你的问题是 Query，书脊标签是 Key，匹配上了，就去取书里的内容 Value。匹配度越高，这本「书」的内容贡献就越多。",
+          "visual": {
+            "type": "diagram",
+            "format": "mermaid",
+            "content": "graph LR; Q[问题 = Query] -->|比对| K[书签 = Key]; K -->|匹配度高→多取| V[内容 = Value]; V --> O[加权汇总]"
+          },
+          "board_action": "draw_step_by_step",
+          "pause_for_question": true,
+          "est_duration_ms": 6500
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "why",
+      "title": "为什么",
+      "scenes": [
+        {
+          "narration": "为什么需要它？看看它取代的老办法 RNN 有什么毛病。RNN 一个词一个词顺着读，离得远的词信息会衰减，而且没法并行。",
+          "visual": {
+            "type": "diagram",
+            "format": "mermaid",
+            "content": "graph LR; w1[w₁] --> w2[w₂] --> w3[w₃] --> w4[w₄]"
+          },
+          "board_action": "draw_step_by_step",
+          "est_duration_ms": 6000
+        },
+        {
+          "narration": "注意力一步就让任意两个词直接相连，还能整句并行计算。长距离直达、可并行、全局视野——这就是它的威力。",
+          "visual": {
+            "type": "text",
+            "content": "## 注意力赢在哪\n- **长距离直达**：任意两词一步相连，不怕隔得远\n- **可并行**：整句一起算，训练快得多\n- **全局视野**：每个词都能看到全句再决定关注谁"
+          },
+          "board_action": "reveal_list",
+          "pause_for_question": true,
+          "est_duration_ms": 6500
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "how",
+      "title": "怎么做",
+      "scenes": [
+        {
+          "narration": "上公式。别怕，我们一项一项拆。这就是大名鼎鼎的「缩放点积注意力」，拆成四步就懂了。",
+          "visual": {
+            "type": "formula",
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)V"
+          },
+          "board_action": "write_formula",
+          "est_duration_ms": 5000
+        },
+        {
+          "narration": "第一步：Q 和 K 做点积，得到每对词的相似度——也就是谁和谁相关。",
+          "visual": {
+            "type": "formula",
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{\\colorbox{amber}{$QK^{T}$}}{\\sqrt{d_k}}\\right)V"
+          },
+          "board_action": "highlight",
+          "highlight": ["QK^T"],
+          "est_duration_ms": 5000
+        },
+        {
+          "narration": "第二步：除以根号 dₖ 做缩放。维度越高点积越大，会把 softmax 推向极端，缩放是为了让梯度稳定。",
+          "visual": {
+            "type": "formula",
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\colorbox{amber}{$\\sqrt{d_k}$}}\\right)V"
+          },
+          "board_action": "highlight",
+          "highlight": ["\\sqrt{d_k}"],
+          "pause_for_question": true,
+          "est_duration_ms": 6500
+        },
+        {
+          "narration": "第三步：softmax 把这些分数归一化成一组加起来等于 1 的权重。",
+          "visual": {
+            "type": "formula",
+            "latex": "\\text{Attention}(Q,K,V)=\\colorbox{amber}{$\\text{softmax}$}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)V"
+          },
+          "board_action": "highlight",
+          "highlight": ["softmax"],
+          "est_duration_ms": 5000
+        },
+        {
+          "narration": "第四步：用这组权重去加权求和 V，得到融合了上下文的新表示。四步走完，就这么简单。",
+          "visual": {
+            "type": "formula",
+            "latex": "\\text{Attention}(Q,K,V)=\\text{softmax}\\!\\left(\\dfrac{QK^{T}}{\\sqrt{d_k}}\\right)\\colorbox{amber}{$V$}"
+          },
+          "board_action": "highlight",
+          "highlight": ["V"],
+          "pause_for_question": true,
+          "est_duration_ms": 6000
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "demo",
+      "title": "演示",
+      "scenes": [
+        {
+          "narration": "看段伪代码走一遍，其实就四行核心。",
+          "visual": {
+            "type": "code",
+            "language": "python",
+            "runnable": true,
+            "content": "# Q, K, V: 形状 [序列长度, d_k]\nscores  = Q @ K.T              # ① 点积算相似度\nscores  = scores / np.sqrt(d_k) # ② 缩放\nweights = softmax(scores, -1)   # ③ 归一化成权重\noutput  = weights @ V           # ④ 加权求和 V"
+          },
+          "board_action": "type_code",
+          "est_duration_ms": 7000
+        },
+        {
+          "narration": "再看一眼算出来的权重长什么样：每一行是一个词的注意力分布，颜色越深、关注越多。看「它」那一行——它把注意力大量分给了「猫」，模型据此判断「它」≈「猫」。",
+          "visual": {
+            "type": "heatmap",                 // 扩展类型：权重矩阵 → 颜色深浅
+            "rows": ["小猫", "垫子", "它"],
+            "cols": ["小猫", "垫子", "它"],
+            "weights": [
+              [0.70, 0.20, 0.10],
+              [0.20, 0.70, 0.10],
+              [0.62, 0.18, 0.20]
+            ],
+            "annotate": "「它」→「小猫」= 0.62"
+          },
+          "board_action": "fade_in",
+          "pause_for_question": true,
+          "est_duration_ms": 8000
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "check",
+      "title": "检验",
+      "scenes": [
+        {
+          "narration": "随堂两道小题，检验一下。第一题：为什么要除以根号 dₖ？",
+          "visual": {
+            "type": "quiz",                    // 扩展类型：随堂小测
+            "question": "公式里除以 √dₖ 的主要作用是？",
+            "options": [
+              "增加模型参数量",
+              "防止点积过大、让 softmax 梯度稳定",   // 正确
+              "把权重变成概率",
+              "加快矩阵乘法"
+            ],
+            "answer": 1,
+            "explain_correct": "对！维度高时点积偏大，softmax 会过于尖锐、梯度趋零；缩放把方差拉回 1 附近。",
+            "explain_wrong": "再想想第二步：问题出在「数值过大」会让 softmax 走极端。"
+          },
+          "board_action": "fade_in",
+          "pause_for_question": true,
+          "est_duration_ms": 9000
+        },
+        {
+          "narration": "第二题：softmax 在这里起什么作用？",
+          "visual": {
+            "type": "quiz",
+            "question": "softmax 这一步的作用是？",
+            "options": [
+              "把一组分数变成和为 1 的权重",        // 正确
+              "计算 Q 和 K 的相似度",
+              "对 V 求平均",
+              "缩放数值范围"
+            ],
+            "answer": 0,
+            "explain_correct": "正确！只有归一化成「占比」，才能拿去加权求和 V。",
+            "explain_wrong": "相似度是第一步 QKᵀ 做的；softmax 负责把分数变成权重。"
+          },
+          "board_action": "fade_in",
+          "est_duration_ms": 8000
+        }
+      ]
+    },
+
+    // ========================================================================
+    {
+      "id": "summary",
+      "title": "小结",
+      "scenes": [
+        {
+          "narration": "收一下。注意力就一句话：为每个词，按相关度加权汇总上下文。记住 Q/K/V 和这四步，你就抓住了 Transformer 的心脏。再往下是多头注意力，把它堆起来就是 Transformer，也就是 ChatGPT 的地基。",
+          "visual": {
+            "type": "text",
+            "content": "## 一页记住注意力\n- **一句话**：为每个词，按相关度加权汇总上下文\n- **三角色**：Q 查询 · K 钥匙 · V 内容\n- **四步**：点积 → 缩放 → softmax → 加权求和\n- **再往下**：多头注意力 → Transformer → 大模型的地基"
+          },
+          "board_action": "reveal_list",
+          "est_duration_ms": 9000
+        },
+        {
+          "narration": "想继续深入，我们下一课可以讲「多头注意力」为什么要多个头，或者「自注意力」和「交叉注意力」的区别。你说了算。",
+          "visual": {
+            "type": "text",
+            "content": "## 想继续？下一课可选\n- 多头注意力：为什么要「多个头」\n- 自注意力 vs 交叉注意力\n- 位置编码：注意力不知道词序，怎么办？"
+          },
+          "board_action": "reveal_list",
+          "pause_for_question": true,
+          "est_duration_ms": 7000
+        }
+      ]
+    }
+  ]
+}

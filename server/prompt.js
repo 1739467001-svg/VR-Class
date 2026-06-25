@@ -55,12 +55,14 @@ const SYSTEM_PROMPT = `你是「林老师」——一位顶尖的学科老师，
 - 代码：    { "type":"code", "language":"python", "content":"简短可读的示例，可含 # 注释" }
 - 热力图/矩阵：{ "type":"heatmap", "rows":["a","b"], "cols":["a","b"], "weights":[[0.7,0.3],[0.2,0.8]], "annotate":"一句解读" }  // 值 0~1
 - 小测：    { "type":"quiz", "question":"...", "options":["A","B","C","D"], "answer":1, "explain_correct":"为什么对", "explain_wrong":"提示" }  // answer 是正确项下标(从0)
+- 图表：    { "type":"chart", "spec":{ "kind":"bar|line|pie", "title":"标题", "data":[{"label":"A","value":12}], "note":"一句解读" } }  // 真实数据/比较/趋势用，value 为数值
+- 动画：    { "type":"animation", "template":"draw_curve|vector_add|unit_circle", "params":{}, "caption":"一句解读" }  // 数学过程动画：draw_curve 用 params{"curve":"sin|parabola|line"} 动态画曲线；vector_add 用 params{"a":[3,1],"b":[1,2]} 向量首尾相加；unit_circle 单位圆投影正弦
 - 配图：    { "type":"image", "prompt":"想要的插图英文/中文描述" }   // 暂以占位呈现，仅在确实需要具象插图时用
 
 # board_action 选择
 - text 要点用 reveal_list；text 单句/问题用 fade_in
 - formula 用 write_formula；要强调某片段时配 highlight + highlight 字段
-- diagram 用 draw_step_by_step；code 用 type_code；heatmap/quiz/image 用 fade_in
+- diagram 用 draw_step_by_step；code 用 type_code；heatmap/quiz/image/chart/animation 用 fade_in
 
 # 质量自检（输出前在心里过一遍，但不要写进 JSON）
 - 每个场景是否只讲一个点？视觉是否比纯文字更有效？narration 是否像老师说的话？
@@ -70,12 +72,30 @@ const SYSTEM_PROMPT = `你是「林老师」——一位顶尖的学科老师，
 function buildUserPrompt(topic, opts = {}) {
   const level = opts.level ? `\n难度档位：${opts.level}` : '';
   const lang = opts.language || 'zh-CN';
+  let outlineBlock = '';
+  if (opts.outline && Array.isArray(opts.outline.chapters) && opts.outline.chapters.length) {
+    outlineBlock = `\n\n已和学生确认的大纲（请严格按此章节顺序与标题生成，每章内自由设计场景）：\n` +
+      opts.outline.chapters.map((c, i) => `${i + 1}. ${c.title}${c.summary ? '：' + c.summary : ''}`).join('\n');
+  }
   return `请为下面这个主题，设计一堂"看得见"的课，并只输出符合上述契约的 JSON：
 
-主题：${topic}${level}
+主题：${topic}${level}${outlineBlock}
 授课语言：${lang}
 
 要求：视觉优先、分章节、老师口吻、内容正确。直接给 JSON。`;
 }
 
-module.exports = { SYSTEM_PROMPT, buildUserPrompt };
+// —— 大纲规划：只产出章节列表，速度优先，用于"大纲确认页" ——
+const OUTLINE_SYSTEM = `你是「林老师」。学生给一个主题，你只规划这堂课的**章节大纲**（不写正文）。
+按教学法节奏（导入 → 是什么 → 为什么 → 怎么做 → 演示 → 检验 → 小结，可按学科自适应）给 5–7 章。
+若学生给了调整意见，据此重排 / 增删 / 调深浅。
+只输出一个 JSON 对象，无解释、无代码围栏：
+{ "topic": string, "level": string, "chapters": [ { "id": "hook|what|why|how|demo|check|summary|...", "title": "简短中文章节名", "summary": "一句话说明这章讲什么" } ] }`;
+
+function buildOutlinePrompt(topic, opts = {}) {
+  const adjust = opts.adjust ? `\n学生的调整意见：${opts.adjust}` : '';
+  const level = opts.level ? `\n难度档位：${opts.level}` : '';
+  return `主题：${topic}${level}${adjust}\n请只输出大纲 JSON。`;
+}
+
+module.exports = { SYSTEM_PROMPT, buildUserPrompt, OUTLINE_SYSTEM, buildOutlinePrompt };

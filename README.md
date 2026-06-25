@@ -26,15 +26,18 @@ ANTHROPIC_API_KEY=sk-ant-xxxx npm start
 
 ```
 浏览器（通用"演示脚本播放器"）
-   │  POST /api/lesson { topic }
+   │  ① POST /api/outline {topic}  →  大纲确认页（可一句话调深浅/换角度）
+   │  ② POST /api/lesson {topic, outline}
    ▼
 后端 server/server.js + prompt.js ──► Claude（强制直出 JSON）
    │  ◄── 校验 ── Lesson Script（chapters → scenes → visual）
    ▼
-按 visual.type 渲染并逐场景播放：text / formula / diagram / code / heatmap / quiz …
+按 visual.type 渲染并逐场景播放，配 TTS 语音讲解 + 章节切换过渡：
+   text / formula / diagram / code / heatmap / quiz / chart / animation / image
 ```
 
 **核心思想：课 = 一段可播放的结构化脚本。** 前端是通用播放器，喂不同脚本就上不同的课。
+体验流程是**点题 → 确认大纲 → 生成 → 播放（带语音）**；想一眼看全 9 类板书，开页面点「🎨 板书类型画廊」。
 
 ### 文档与产物
 

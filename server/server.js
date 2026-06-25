@@ -18,7 +18,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { SYSTEM_PROMPT, buildUserPrompt } = require('./prompt');
+const { SYSTEM_PROMPT, buildUserPrompt, OUTLINE_SYSTEM, buildOutlinePrompt } = require('./prompt');
 
 // 极简 .env 加载（零依赖）：把仓库根目录 .env 的 KEY=VAL 注入 process.env（不覆盖已有值）
 (function loadEnv() {
@@ -93,10 +93,27 @@ function validateLesson(o) {
   return o;
 }
 
+function validateOutline(o) {
+  if (!o || !Array.isArray(o.chapters) || o.chapters.length === 0) throw new Error('outline.chapters missing/empty');
+  o.chapters = o.chapters.map((c, i) => ({ id: c.id || `c${i}`, title: c.title || `第 ${i + 1} 章`, summary: c.summary || '' }));
+  o.topic = o.topic || '未命名主题';
+  o.level = o.level || '';
+  return o;
+}
+
 let SAMPLE_CACHE = null;
 function loadSampleLesson() {
   if (!SAMPLE_CACHE) SAMPLE_CACHE = validateLesson(JSON.parse(stripJsonc(fs.readFileSync(SAMPLE, 'utf8'))));
   return SAMPLE_CACHE;
+}
+// 示例模式下，从内置样例课派生一份"大纲"
+function sampleOutline(topic) {
+  const s = loadSampleLesson();
+  return {
+    topic: topic || s.topic, level: s.level || '示例',
+    chapters: s.chapters.map(c => ({ id: c.id, title: c.title, summary: ((c.scenes[0] && c.scenes[0].narration) || '').replace(/\s+/g, '').slice(0, 26) })),
+    _mock: true,
+  };
 }
 
 // ---------- 调用 Claude ----------
@@ -141,6 +158,22 @@ async function generateAnswer(topic, question, context) {
   return (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim();
 }
 
+// 大纲规划：用快速档模型，只产出章节列表（供"大纲确认页"）
+async function generateOutline(topic, opts) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: ASK_MODEL, max_tokens: 1200, system: OUTLINE_SYSTEM,
+      messages: [{ role: 'user', content: buildOutlinePrompt(topic, opts) }, { role: 'assistant', content: '{' }],
+    }),
+  });
+  if (!resp.ok) throw new Error(`Anthropic API ${resp.status}: ${(await resp.text().catch(() => '')).slice(0, 200)}`);
+  const data = await resp.json();
+  let text = '{' + (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  return validateOutline(JSON.parse(extractJsonObject(text)));
+}
+
 // ---------- HTTP ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
@@ -167,7 +200,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', c => (raw += c));
     req.on('end', async () => {
       let topic = '', opts = {};
-      try { const j = JSON.parse(raw || '{}'); topic = (j.topic || '').trim(); opts = { level: j.level, language: j.language }; }
+      try { const j = JSON.parse(raw || '{}'); topic = (j.topic || '').trim(); opts = { level: j.level, language: j.language, outline: j.outline }; }
       catch { return send(res, 400, JSON.stringify({ error: '请求体不是合法 JSON' }), { 'content-type': 'application/json' }); }
       if (!topic) return send(res, 400, JSON.stringify({ error: '缺少 topic' }), { 'content-type': 'application/json' });
 
@@ -184,6 +217,26 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         console.error('[lesson] 生成失败:', e.message);
         send(res, 502, JSON.stringify({ error: '生成失败：' + e.message }), { 'content-type': 'application/json; charset=utf-8' });
+      }
+    });
+    return;
+  }
+
+  // 大纲规划（供"大纲确认页"）
+  if (url.pathname === '/api/outline' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', c => (raw += c));
+    req.on('end', async () => {
+      let j = {};
+      try { j = JSON.parse(raw || '{}'); } catch { return send(res, 400, JSON.stringify({ error: '请求体不是合法 JSON' }), { 'content-type': 'application/json' }); }
+      const topic = (j.topic || '').trim();
+      if (!topic) return send(res, 400, JSON.stringify({ error: '缺少 topic' }), { 'content-type': 'application/json' });
+      try {
+        const outline = MOCK ? sampleOutline(topic) : await generateOutline(topic, { level: j.level, adjust: j.adjust });
+        send(res, 200, JSON.stringify(outline), { 'content-type': 'application/json; charset=utf-8' });
+      } catch (e) {
+        console.error('[outline] 失败:', e.message);
+        send(res, 502, JSON.stringify({ error: '大纲生成失败：' + e.message }), { 'content-type': 'application/json; charset=utf-8' });
       }
     });
     return;
@@ -231,4 +284,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { extractJsonObject, validateLesson, stripJsonc, loadSampleLesson };
+module.exports = { extractJsonObject, validateLesson, validateOutline, stripJsonc, loadSampleLesson, sampleOutline };

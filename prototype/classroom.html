@@ -100,6 +100,8 @@
   .step.done .ix{background:#243056; border-color:#3a4684; color:var(--teal)}
   .step.active{background:linear-gradient(90deg,rgba(54,214,195,.14),transparent); color:var(--ink); font-weight:600}
   .step.active .ix{border-color:var(--teal); color:#06121f; background:var(--teal); box-shadow:0 0 12px rgba(54,214,195,.6)}
+  .step.pending{opacity:.42; cursor:default}
+  .step.pending .ix{border-style:dashed; font-size:9px}
 
   .stage{position:relative; display:flex; flex-direction:column; min-height:0}
   .board-wrap{flex:1; position:relative; min-height:0}
@@ -515,9 +517,25 @@ function renderAnimation(v){
   }
   return el(`${v.title?`<h2 class="b-title" style="font-size:22px">${esc(v.title)}</h2>`:''}<div class="anim-box">${svg}${cap}</div>`);
 }
+let IMAGE_ON=false; const IMG_CACHE={};
+function imgFrame(url, cap){ return el(`<div class="img-frame"><img src="${esc(url)}" alt="${esc(cap||'')}"/>${cap?`<div class="img-cap">${esc(cap)}</div>`:''}</div>`); }
 function renderImage(v){
-  if(v.url) return el(`<div class="img-frame"><img src="${esc(v.url)}" alt="${esc(v.prompt||'')}"/>${v.prompt?`<div class="img-cap">${esc(v.prompt)}</div>`:''}</div>`);
-  return el(`<div class="img-frame"><div class="img-ph"><div style="font-size:30px">🖼️</div><div style="font-size:13px;max-width:380px;text-align:center;padding:0 16px">${esc(v.prompt||'配图')}</div></div><div class="img-cap">配图占位 · 产品版由图像模型按描述生成</div></div>`);
+  if(v.url) return imgFrame(v.url, v.prompt);
+  const prompt=v.prompt||''; const cached=IMG_CACHE[prompt];
+  if(cached && cached.url) return imgFrame(cached.url, prompt);
+  const generating = IMAGE_ON && !(cached && cached.error);
+  const box = el(`<div class="img-frame"><div class="img-ph">${generating?'<div class="spin" style="width:30px;height:30px;border-width:3px"></div>':'<div style="font-size:30px">🖼️</div>'}<div style="font-size:13px;max-width:380px;text-align:center;padding:0 16px">${esc(prompt||'配图')}</div></div><div class="img-cap">${generating?'正在生成配图…（通义万相）':'配图占位 · 配 DASHSCOPE_API_KEY 后真生成'}</div></div>`);
+  if(IMAGE_ON && prompt && !cached) requestImage(prompt);
+  return box;
+}
+function requestImage(prompt){
+  IMG_CACHE[prompt]={pending:true};
+  fetch('/api/image',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt})})
+    .then(r=>r.json()).then(j=>{
+      if(j && j.url){ IMG_CACHE[prompt]={url:j.url};
+        const s=LESSON.scenes[cur]; if(s && s.visual && s.visual.type==='image' && (s.visual.prompt||'')===prompt && !s.visual.url) paintScene(cur);
+      } else IMG_CACHE[prompt]={error:true};
+    }).catch(()=>{ IMG_CACHE[prompt]={error:true}; });
 }
 function renderPlaceholder(v){ return el(`<div class="img-frame"><div class="img-ph"><div style="font-size:30px">✨</div><div>「${esc(v.type)}」视觉（产品版支持）</div></div></div>`); }
 
@@ -541,8 +559,18 @@ function setSpeaking(on){ document.getElementById('tutor').classList.toggle('spe
 
 function renderRail(){
   const list=document.getElementById("railList"); list.innerHTML="";
-  LESSON.chapters.forEach((c,i)=>{ const d=document.createElement("div"); d.className="step"; d.dataset.ch=i;
-    d.innerHTML=`<span class="ix">${i+1}</span><span>${esc(c)}</span>`; d.onclick=()=>jumpToChapter(i); list.appendChild(d); });
+  LESSON.chapters.forEach((c,i)=>{
+    const loaded = !STREAMING || LOADED_CH.has(i);
+    const d=document.createElement("div"); d.className="step"+(loaded?"":" pending"); d.dataset.ch=i;
+    d.innerHTML=`<span class="ix">${loaded?(i+1):'∙∙'}</span><span>${esc(c)}</span>`;
+    d.onclick=()=>{ if(!STREAMING || LOADED_CH.has(i)) jumpToChapter(i); };
+    list.appendChild(d);
+  });
+  updateRailActive();
+}
+function updateRailActive(){
+  const ch = LESSON.scenes[cur] ? LESSON.scenes[cur].ch : -1;
+  document.querySelectorAll(".step").forEach(st=>{ const c=+st.dataset.ch; st.classList.toggle("active",c===ch); st.classList.toggle("done",c<ch && (!STREAMING || LOADED_CH.has(c))); });
 }
 function paintScene(i){
   if(!LESSON.scenes.length) return;
@@ -553,7 +581,7 @@ function paintScene(i){
   document.getElementById("chapterTag").textContent=LESSON.chapters[s.ch]||'';
   document.getElementById("sceneCounter").textContent=`${cur+1} / ${LESSON.scenes.length}`;
   document.getElementById("progressBar").style.width=((cur+1)/LESSON.scenes.length*100)+"%";
-  document.querySelectorAll(".step").forEach(st=>{ const ch=+st.dataset.ch; st.classList.toggle("active",ch===s.ch); st.classList.toggle("done",ch<s.ch); });
+  updateRailActive();
   setSpeaking(true);
   document.getElementById("tutorBubble").textContent = bubbleFor(s.ch);
 }
@@ -585,7 +613,11 @@ function scheduleNext(){
   if(!playing) return;
   const s=LESSON.scenes[cur]; if(!s) return;
   const text=s.narration||'';
-  const advance=()=>{ if(!playing) return; if(cur<LESSON.scenes.length-1) goToScene(cur+1,{transition:true}); else pausePlay(); };
+  const advance=()=>{ if(!playing) return;
+    if(cur<LESSON.scenes.length-1){ goToScene(cur+1,{transition:true}); }
+    else if(STREAMING && !STREAM_DONE){ WAITING_FOR_MORE=true; document.getElementById('subtitle').textContent='下一章马上就好…'; document.getElementById('tutorBubble').textContent='我在写下一章… ✍️'; }
+    else pausePlay();
+  };
   if(ttsActive() && text){
     try{
       const u=new SpeechSynthesisUtterance(text); u.lang='zh-CN'; u.rate=1.03; u.pitch=1.02;
@@ -606,7 +638,7 @@ function startPlay(){ playing=true; document.getElementById("playBtn").textConte
 function pausePlay(){ playing=false; document.getElementById("playBtn").textContent="▶"; clearTimeout(timer); clearTimeout(fallbackTimer); if(synth)try{synth.cancel();}catch(e){} setSpeaking(false); }
 function toggleVoice(){ voiceOn=!voiceOn; const b=document.getElementById('voiceBtn'); b.textContent=voiceOn?'🔊':'🔇'; b.classList.toggle('off',!voiceOn);
   if(synth)try{synth.cancel();}catch(e){} if(playing) scheduleNext(); }
-function beginPlayback(){ renderRail(); cur=0; paintScene(0); playing=true; document.getElementById('playBtn').textContent='⏸'; scheduleNext(); }
+function beginPlayback(){ STREAMING=false; STREAM_DONE=true; PLAYBACK_STARTED=true; renderRail(); cur=0; paintScene(0); playing=true; document.getElementById('playBtn').textContent='⏸'; scheduleNext(); }
 
 /* ---------- 备课中 / 提示 ---------- */
 function showLoading(on, topic){
@@ -654,22 +686,62 @@ async function adjustOutline(hint){
 function adjustFromInput(){ const v=document.getElementById('otInput').value.trim(); if(v){ document.getElementById('otInput').value=''; adjustOutline(v); } }
 function confirmOutline(){ document.getElementById('outline').classList.remove('on'); goToLesson(PENDING_TOPIC, CURRENT_OUTLINE); }
 
+/* —— 流式：第 1 章生成完就开播，后台续生成 —— */
+let STREAMING=false, STREAM_DONE=true, PLAYBACK_STARTED=false, WAITING_FOR_MORE=false;
+const LOADED_CH=new Set();
+function parseSSE(chunk){
+  let event='message', data='';
+  chunk.split('\n').forEach(line=>{ if(line.startsWith('event:')) event=line.slice(6).trim(); else if(line.startsWith('data:')) data+=line.slice(5).trim(); });
+  if(!data) return null;
+  try{ return {event, data:JSON.parse(data)}; }catch(_){ return {event, data:{}}; }
+}
+async function streamLesson(topic, outline){
+  LESSON.title=topic; LESSON.chapters=[]; LESSON.scenes=[];
+  STREAMING=true; STREAM_DONE=false; PLAYBACK_STARTED=false; WAITING_FOR_MORE=false; LOADED_CH.clear();
+  const resp=await fetch('/api/lesson/stream',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({topic, outline})});
+  if(!resp.ok || !resp.body) throw new Error('stream HTTP '+resp.status);
+  const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
+  while(true){
+    const {done,value}=await reader.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true}); let idx;
+    while((idx=buf.indexOf('\n\n'))>=0){ const ev=parseSSE(buf.slice(0,idx)); buf=buf.slice(idx+2); if(ev) handleStreamEvent(ev); }
+  }
+  STREAMING=false; STREAM_DONE=true; renderRail();
+  if(!PLAYBACK_STARTED) throw new Error('no chapters generated');
+}
+function handleStreamEvent(ev){
+  const d=ev.data||{};
+  if(ev.event==='meta'){
+    LESSON.title=d.topic||LESSON.title; LESSON.chapters=(d.chapters||[]).slice();
+    renderRail();
+    const badge = d.mock?` <span class="mode-badge">示例模式</span>` : (d.retrieval?` <span class="mode-badge">🔎 已联网检索</span>`:'');
+    document.getElementById('topTitle').innerHTML=`正在上：<b>${esc(LESSON.title)}</b>${badge}`;
+    if(d.retrieval) toast('🔎 时效性主题：已联网检索最新资料再讲（注意核对来源与时间）。');
+  }
+  else if(ev.event==='brief'){ LESSON._brief=d.brief; }
+  else if(ev.event==='chapter'){
+    const ci=d.index; (d.scenes||[]).forEach(s=> LESSON.scenes.push({ch:ci, narration:s.narration, visual:s.visual, highlight:s.highlight||[]}));
+    LOADED_CH.add(ci); renderRail();
+    if(!PLAYBACK_STARTED){ PLAYBACK_STARTED=true; showLoading(false); cur=0; paintScene(0); playing=true; document.getElementById('playBtn').textContent='⏸'; scheduleNext(); }
+    else if(WAITING_FOR_MORE){ WAITING_FOR_MORE=false; if(playing) goToScene(cur+1,{transition:true}); }
+  }
+  else if(ev.event==='chapter_error'){ LOADED_CH.add(d.index); renderRail(); toast('某章生成失败，已跳过：'+(d.title||'')); }
+  else if(ev.event==='done'){ STREAM_DONE=true; }
+  else if(ev.event==='error'){ STREAM_DONE=true; if(!PLAYBACK_STARTED) throw new Error(d.message||'stream error'); else toast('生成中断：'+(d.message||'')); }
+}
 async function goToLesson(topic, outline){
   document.getElementById('entry').style.display='none';
   document.getElementById('outline').classList.remove('on');
   document.getElementById('lesson').classList.add('on');
   document.getElementById('topTitle').innerHTML=`正在备课：<b>${esc(topic)}</b>`;
   pausePlay(); showLoading(true, topic);
-  try{
-    const lesson=await fetchJSON('/api/lesson',{topic, outline});
-    loadLesson(lesson); showLoading(false);
-    document.getElementById('topTitle').innerHTML=`正在上：<b>${esc(LESSON.title)}</b>${lesson._mock?` <span class="mode-badge">示例模式</span>`:''}`;
-    if(lesson._mock) toast('示例模式：返回内置样例课。设置 ANTHROPIC_API_KEY 后可生成任意主题。');
-    beginPlayback();
-  }catch(e){
-    loadLesson(BUILTIN_LESSON); showLoading(false);
-    document.getElementById('topTitle').innerHTML=`正在上：<b>${esc(LESSON.title)}</b> <span class="mode-badge warn">离线示例</span>`;
-    beginPlayback(); toast('未连接后端，已加载内置示例课。');
+  try{ await streamLesson(topic, outline); }
+  catch(e){
+    if(!PLAYBACK_STARTED){
+      STREAMING=false; loadLesson(BUILTIN_LESSON); showLoading(false);
+      document.getElementById('topTitle').innerHTML=`正在上：<b>${esc(LESSON.title)}</b> <span class="mode-badge warn">离线示例</span>`;
+      beginPlayback(); toast('未连接后端，已加载内置示例课。');
+    }
   }
 }
 function loadGallery(){
@@ -680,7 +752,7 @@ function loadGallery(){
   loadLesson(GALLERY_LESSON); beginPlayback();
 }
 function resetApp(){
-  pausePlay();
+  pausePlay(); STREAMING=false; STREAM_DONE=true;
   document.getElementById("lesson").classList.remove("on");
   document.getElementById("outline").classList.remove("on");
   document.getElementById("entry").style.display="flex";
@@ -711,9 +783,11 @@ window.addEventListener("keydown",e=>{
 (function init(){
   try{ if(window.mermaid) mermaid.initialize({startOnLoad:false, theme:'dark', securityLevel:'loose', fontFamily:'inherit'}); }catch(e){}
   fetch('/health').then(r=>r.json()).then(h=>{
-    LIVE_MODE = h.mode==='live'; const note=document.getElementById('entryNote');
-    if(h.mode==='live') note.innerHTML=`✅ 已连接实时生成（模型 <code>${esc(h.model||'')}</code>）— 输入任意主题，老师现场为你开课。`;
-    else note.innerHTML=`当前为<b style="color:var(--teal)">示例模式</b>：会返回内置样例课。要生成任意主题，请用 <code>ANTHROPIC_API_KEY=... npm start</code> 启动后端。`;
+    LIVE_MODE = h.mode==='live'; IMAGE_ON = !!h.image; const note=document.getElementById('entryNote');
+    if(h.mode==='live'){
+      const caps = [`文本 <code>${esc(h.provider||'')}/${esc(h.model||'')}</code>`, h.image?'配图✓':'', h.search?'联网检索✓':''].filter(Boolean).join(' · ');
+      note.innerHTML=`✅ 已连接实时生成（${caps}）— 输入任意主题，老师现场为你**流式**开课。`;
+    } else note.innerHTML=`当前为<b style="color:var(--teal)">示例模式</b>：会流式返回内置样例课。要生成任意主题，配 <code>ANTHROPIC_API_KEY</code> 或 <code>DASHSCOPE_API_KEY</code> 后 <code>npm start</code>。`;
   }).catch(()=>{ document.getElementById('entryNote').innerHTML=`提示：直接打开本文件可看<b style="color:var(--teal)">内置示例课</b>；运行 <code>node server/server.js</code> 后端可现场生成任意主题。`; });
 })();
 

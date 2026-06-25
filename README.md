@@ -14,8 +14,9 @@
 # 1) 示例模式（无需 API Key，验证整条链路）
 npm run mock           # 等价 MOCK=1 node server/server.js
 
-# 2) 接真 AI（现场生成任意主题）
-ANTHROPIC_API_KEY=sk-ant-xxxx npm start
+# 2) 接真 AI（现场生成任意主题）—— 二选一或都给
+ANTHROPIC_API_KEY=sk-ant-xxxx npm start      # Claude 生成正文
+DASHSCOPE_API_KEY=sk-xxxx     npm start      # 阿里云 Qwen 正文 + 通义万相配图 + 联网检索
 ```
 
 然后打开 **http://localhost:8000**，输入任意主题即可上课。详见 [运行指南](docs/RUNNING.md)。
@@ -26,18 +27,20 @@ ANTHROPIC_API_KEY=sk-ant-xxxx npm start
 
 ```
 浏览器（通用"演示脚本播放器"）
-   │  ① POST /api/outline {topic}  →  大纲确认页（可一句话调深浅/换角度）
-   │  ② POST /api/lesson {topic, outline}
+   │ ① POST /api/outline {topic}              → 大纲确认页（可一句话调深浅/换角度）
+   │ ② POST /api/lesson/stream {topic,outline} → SSE：逐章下发
    ▼
-后端 server/server.js + prompt.js ──► Claude（强制直出 JSON）
-   │  ◄── 校验 ── Lesson Script（chapters → scenes → visual）
+后端 server.js + prompt.js + providers.js
+   │ · 时效主题：先联网检索（DashScope）→ 注入生成
+   │ · 逐章调文本模型（Claude 或 Qwen）→ 每章 SSE 推一个 chapter 事件
    ▼
-按 visual.type 渲染并逐场景播放，配 TTS 语音讲解 + 章节切换过渡：
-   text / formula / diagram / code / heatmap / quiz / chart / animation / image
+前端：第 1 章到达即开播，后续边到边追加；image 场景后台经通义万相真生成、就位即现
+   板书 9 类：text / formula / diagram / code / heatmap / quiz / chart / animation / image
+   播放配 🔊 TTS 语音讲解（讲完一句才翻屏）+ 章节切换过渡
 ```
 
 **核心思想：课 = 一段可播放的结构化脚本。** 前端是通用播放器，喂不同脚本就上不同的课。
-体验流程是**点题 → 确认大纲 → 生成 → 播放（带语音）**；想一眼看全 9 类板书，开页面点「🎨 板书类型画廊」。
+体验流程：**点题 → 确认大纲 → 流式生成边到边播 → 配图就位即现 → 随时提问**；想一眼看全 9 类板书，开页面点「🎨 板书类型画廊」。
 
 ### 文档与产物
 
@@ -45,7 +48,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxx npm start
 - 🎨 [交互 / 视觉设计稿](docs/UX-Design.md) — 虚拟教室布局、板书演示动效、老师立绘、配色字体（含截图）。
 - ▶️ [运行指南](docs/RUNNING.md) — 怎么跑、环境变量、接口、降级行为、下一步。
 - 🖥️ [可交互前端 `prototype/classroom.html`](prototype/classroom.html) — 通用演示脚本播放器（虚拟教室 UI）。
-- 🔌 [`server/`](server/) — 零依赖后端：`server.js`（HTTP + 编排）+ `prompt.js`（内容引擎提示）。
+- 🔌 [`server/`](server/) — 零依赖后端：`server.js`（HTTP + 流式编排）· `prompt.js`（内容引擎提示）· `providers.js`（Claude/Qwen 文本 · 通义万相配图 · 联网检索）。
 - 📜 [样例课脚本 `sample-lesson-attention.jsonc`](docs/sample-lesson-attention.jsonc) — Lesson Script 数据契约的完整示例。
 
 ## 核心理念
